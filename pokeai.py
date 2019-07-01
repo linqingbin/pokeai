@@ -3,38 +3,6 @@ import numpy as np
 
 TYPE_AGANIST_FILE_PATH = "typeAganist.csv"
 
-# 新属性被其他属性攻击的显著性得分，越显著得分越低
-DEFENCE_ADD = {
-    "2": 0,
-    "1/2": 2,
-    "0": 4,
-    "1": 1
-}
-
-# 既有属性被其他属性攻击的显著性系数加成，越显著系数越高，默认为1
-DEFENCE_COEF = {
-    "2": 2,
-    "1/2": 0.5,
-    "0": 0,
-    "1": 1
-}
-
-# 新属性攻击其他属性的显著性得分，越显著得分越高
-ATTACK_ADD = {
-    "2": 2,
-    "1/2": 0.5,
-    "0": 0,
-    "1": 1
-}
-
-# 既有属性攻击其他属性的显著性系数加成，越显著系数越低，默认为1
-ATTACK_COEF = {
-    "2": 0.5,
-    "1/2": 2,
-    "0": 4,
-    "1": 1
-}
-
 GOOD_WEAK_CHECK = {
     "2": {
         "attack": 2,
@@ -78,19 +46,6 @@ class PokeDoctor(object):
             if optionType in existsTypes:
                 continue
             else:
-                socre = self._scoreType(existsTypes, optionType)
-                scoreDict[optionType] = socre
-        sortedIems = sorted(scoreDict.items(),
-                            key=lambda x: x[1], reverse=True)
-        bestNextType, bestScore = sortedIems[0]
-        return bestNextType, bestScore, sortedIems
-
-    def selectBestNextType2(self, existsTypes, mehtod="balance"):
-        scoreDict = {}
-        for optionType in self.types:
-            if optionType in existsTypes:
-                continue
-            else:
                 party = existsTypes + [optionType]
                 report = self.analyse(party)
                 score = report['totalScore']
@@ -101,7 +56,7 @@ class PokeDoctor(object):
         return bestNextType, bestScore, sortedIems
 
     def getReport(self, existsTypes):
-        bestNextType, bestScore, sortedIems = self.selectBestNextType2(
+        bestNextType, bestScore, sortedIems = self.selectBestNextType(
             existsTypes)
         report = self.analyse(existsTypes)
         report['bestNextTypes'] = [x[0] for x in sortedIems][:3]
@@ -109,52 +64,6 @@ class PokeDoctor(object):
         report['optionTypes'] = self.types        
         return report
 
-    def scoreParty(self, existsTypes):
-        '''
-        '''
-        pass
-
-    def _scoreType(self, existsTypes, newType, method="balance"):
-        '''
-        scoreMethod:balance,attack,defence
-        '''
-        newTypeIndex = self.types.index(newType)
-        # valuate defend
-        defenseScore = 0
-        attackScore = 0
-        for part in ['defense', 'attack']:
-            if part == 'defense':
-                aganistRow = self.typeAganistMat[:, newTypeIndex]
-                addDict = DEFENCE_ADD
-                coefDict = DEFENCE_COEF
-            else:
-                aganistRow = self.typeAganistMat[newTypeIndex, :]
-                addDict = ATTACK_ADD
-                coefDict = ATTACK_COEF
-            for i, value in enumerate(aganistRow):
-                add = addDict[value]
-                coef = 1
-                for existsType in existsTypes:
-                    existsTypeIndex = self.types.index(existsType)
-                    if part == "defense":
-                        existsValue = self.typeAganistMat[i, existsTypeIndex]
-                    else:
-                        existsValue = self.typeAganistMat[existsTypeIndex, i]
-                    coef *= coefDict[existsValue]
-                record = add * coef
-                if part == "defense":
-                    defenseScore += record
-                else:
-                    attackScore += record
-        if method == "balance":
-            weight = (0.5, 0.5)
-        elif method == "defense":
-            weight = (0.75, 0.25)
-        elif method == "attack":
-            weight = (0.25, 0.75)
-        defenseScoreWeight, attackScoreWeight = weight
-        finalScore = defenseScoreWeight*defenseScore + attackScoreWeight*attackScore
-        return finalScore
 
     def analyse(self, existsTypes):
         '''
@@ -208,10 +117,6 @@ def scoreGoodWeak(goodWeak):
         return molecule/denominator
     else:
         return 0
-
-
-def numebr2coef(number):
-    pass
 
 
 def symbol2number(symbol):
