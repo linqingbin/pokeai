@@ -1,135 +1,143 @@
+import math
 import csv
 import numpy as np
-
-TYPE_AGANIST_FILE_PATH = "typeAganist.csv"
-
-GOOD_WEAK_CHECK = {
-    "2": {
-        "attack": 2,
-        "defense": 0.5
-    },
-    "1/2": {
-        "attack": 0.5,
-        "defense": 2
-    },
-    "1": {
-        "attack": 1,
-        "defense": 1
-    },
-    "0": {
-        "attack": 0,
-        "defense": 4
-    },
-}
-
-
-def getTypeAganistMatrix():
-    with open(TYPE_AGANIST_FILE_PATH, "r", encoding="utf-8") as f:
-        channel = csv.reader(f)
-        data = [x for x in channel]
-    arr = np.array(data)
-    types = [x.replace("\xa0", "") for x in arr[0, :][1:]]
-    relations = arr[1:, 1:]
-    numberMat = np.array([[symbol2number(x) for x in row]
-                          for row in relations])
-    return numberMat, types
+import logging
+from settings import TYPE_MAP_FILE_PATH, MODIFIER_RATIO_CHECK, STRATEGY_WEIGHT_MAP, SYMBOL_MODIFIER_MAP
 
 
 class PokeDoctor(object):
 
-    def __init__(self):
-        self.typeAganistMat, self.types = getTypeAganistMatrix()
+    def __init__(self, strategy="balance"):
+        '''
+        strategy: String, balance, attack or defense
+        '''
+        self.typeMapMat, self.types = getTypeMapMat()
+        self.strategy = strategy
 
-    def selectBestNextType(self, existsTypes, mehtod="balance"):
+    def getReport(self, existsTypes, topN=3):
+        '''
+        获得针对当前组合的分析报告
+        return dict
+        '''
+        report = self._analyse(existsTypes)
+        nextTypeRank = self._recommendNextType(existsTypes)
+        report['next'] = [x[0] for x in nextTypeRank][:topN]
+        report['nextTypeRank'] = nextTypeRank
+        return report
+
+    def getRecommend(self, existsTypes, topN=3):
+        '''
+        仅仅获得推荐内容
+        '''
+        report = {}
+        nextTypeRank = self._recommendNextType(existsTypes)
+        report['next'] = [x[0] for x in nextTypeRank][:topN]
+        report['nextTypeRank'] = nextTypeRank
+        return report
+
+    def _recommendNextType(self, existsTypes):
+        '''
+        获得针对当前组合的下一个属性的推荐列表
+        return list
+        '''
         scoreDict = {}
         for optionType in self.types:
             if optionType in existsTypes:
                 continue
             else:
-                party = existsTypes + [optionType]
-                report = self.analyse(party)
-                score = report['totalScore']
-                scoreDict[optionType] = score
-        sortedIems = sorted(scoreDict.items(),
-                            key=lambda x: x[1], reverse=True)
-        bestNextType, bestScore = sortedIems[0]
-        return bestNextType, bestScore, sortedIems
+                newParty = existsTypes + [optionType]
+                # oldReport = self._analyse(existsTypes)
+                newReport = self._analyse(newParty)
+                # oldScore = oldReport['score']
+                newScore = newReport['score']
 
-    def getReport(self, existsTypes):
-        bestNextType, bestScore, sortedIems = self.selectBestNextType(
-            existsTypes)
-        report = self.analyse(existsTypes)
-        report['bestNextTypes'] = [x[0] for x in sortedIems][:3]
-        report['existsTypes'] = existsTypes
-        report['optionTypes'] = self.types        
-        return report
+                scoreDict[optionType] = newScore
+        typeRank = sorted(scoreDict.items(),
+                          key=lambda x: x[1], reverse=True)
+        return typeRank
 
-
-    def analyse(self, existsTypes):
+    def _analyse(self, existsTypes):
         '''
-        分析某个组合的优劣势
+        分析当前组合对每个属性的优劣势及其综合分
+        return dict
         '''
         existsTypeIndexes = [self.types.index(
             existsType) for existsType in existsTypes]
-        defenseMat = self.typeAganistMat[:, existsTypeIndexes]
-        attackMat = self.typeAganistMat[existsTypeIndexes, :]
-        scores = []
-        scoreMat = []
-        for i in range(len(self.types)):
-            defenseScore, attackScore = scoreParty(
-                defenseMat[i, :], attackMat[:, i])
-            scoreMat.append([defenseScore, attackScore])
-            score = np.mean([defenseScore, attackScore])
-            scores.append(score)
-        scoreMat = np.array(scoreMat)
-        sortedTypes = sorted(zip(self.types, scores),
-                             key=lambda x: x[1], reverse=True)
+        # defenseMat = self.typeMapMat[:, existsTypeIndexes]
+        # attackMat = self.typeMapMat[existsTypeIndexes, :]
+        details = []
+        weights = STRATEGY_WEIGHT_MAP[self.strategy]
+        for i, optionType in enumerate(self.types):
+            # print(optionType)
+            # 将当前的属性组合对每个对抗属性进行防御和攻击的综合分的评估
+            # 注意弱点不仅是防御，优势不仅是攻击
+            defenseModifiers = self.typeMapMat[i, existsTypeIndexes].tolist()
+            attackModifiers = self.typeMapMat[existsTypeIndexes, i].tolist()
+            defenseScore = scoreModifiers(defenseModifiers, flag="defense")
+            attackScore = scoreModifiers(attackModifiers, flag="attack")
+            score = ratioMean(np.array(
+                [defenseScore ** weights["defense"], attackScore ** weights["attack"]]))
+            details.append([defenseScore, attackScore, score])
+        sortedTypeDetails = sorted(zip(self.types, details),
+                                   key=lambda x: (x[1][2], x[1][1]), reverse=True)
+        finalScore = ratioMean(np.array(details)[:, 2])
         report = {
-            "weakness": list(reversed([x[0] for x in sortedTypes[-3:]])),
-            "goodness": [x[0] for x in sortedTypes[:3]],
-            "scoreMat": scoreMat,
-            "totalScore": np.round(scoreMat.mean(), 2)
+            "exists": existsTypes,
+            "weakness": list(reversed([x[0] for x in sortedTypeDetails[-3:]])),
+            "goodness": [x[0] for x in sortedTypeDetails[:3]],
+            "details": sortedTypeDetails,
+            "score": finalScore,
+            "options": self.types,
+            "method": self.strategy
         }
         return report
 
 
-def scoreParty(defenseArr, attackArr):
-    scores = []
-    for flag, arr in [('defense', defenseArr), ('attack', attackArr)]:
-        goodWeak = [GOOD_WEAK_CHECK[i][flag] for i in arr]
-        score = scoreGoodWeak(goodWeak)
-        scores.append(np.round(score, 2))
-    defenseScore, attackScore = scores
-    return (defenseScore, attackScore)
+def ratioMean(ratiosArr):
+    return ratiosArr.prod() ** (1/len(ratiosArr))
 
 
-def scoreGoodWeak(goodWeak):
-    molecule = 0
-    denominator = 0
-    for x in goodWeak:
-        if x >= 2:
-            molecule += x * 2
-            denominator += 2
-        else:
-            molecule += x
-            denominator += 1
-    if denominator > 0:
-        return molecule/denominator
-    else:
-        return 0
+def scoreModifiers(modifiers: list, flag: str):
+    '''
+    分析组合对某个属性的修正系数的评分。
+    基本规则是：
+    * modifiers的长度等于组合的长度
+    * 先将modifier转化为ratio，ratio的范围0.25到4
+    * 如果存在多个显著，数量越多，得分增幅越低。
+
+    例如flag为attack，我方火、水、草对于刚属性的ratio是[0.5,0.5,0.5]，则相比与火、水的[0.5,0.5]，得分应该下降，但是降幅应该减缓
+    例如flag为attack，我方冰、火、岩石对于飞行属性的ratio是[2,2,2]，则相比与冰、火的[2,2]，得分应该上升，但是升幅应该减缓
+
+    params:
+        flag: String, attack or defense
+
+    return:
+        score: float
+    '''
+    ratios = [MODIFIER_RATIO_CHECK[i][flag]
+              for i in modifiers]    # 对每个属性的优劣势表
+    ratiosArr = np.array(ratios)
+    score = np.round(ratiosArr.prod() ** (1/len(ratiosArr)), 2)
+    return score
 
 
-def symbol2number(symbol):
+def getTypeMapMat():
+    '''获得属性映射表'''
+    with open(TYPE_MAP_FILE_PATH, "r", encoding="utf-8") as f:
+        channel = csv.reader(f)
+        data = [x for x in channel]
+    arr = np.array(data)
+    types = [x.replace("\xa0", "") for x in arr[0, :][1:]]
+    relations = arr[1:, 1:]
+    typeMapMat = np.array([[symbol2modifier(x) for x in row]
+                           for row in relations])
+    return typeMapMat, types
+
+
+def symbol2modifier(symbol):
     '''
     关系符号转化为数字。注意这里的×不是x，1⁄2也不是1/2。
     '''
     value = symbol.replace("×", "")
-    if value == "0":
-        number = "0"
-    elif value == "1⁄2":
-        number = "1/2"
-    elif value == "2":
-        number = "2"
-    else:
-        number = "1"
-    return number
+    modifier = SYMBOL_MODIFIER_MAP.get(value, "1")
+    return modifier
