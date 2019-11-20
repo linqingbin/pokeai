@@ -7,6 +7,9 @@ def test_getTypeMapMat():
     assert isinstance(mat[0, 0], str)
     assert isinstance(types, list)
 
+def test_getTypeMoveMat():
+    result = pokeai.getTypeMoveMat()
+    print(result)
 
 def test_symbol2modifier():
     cases = [
@@ -46,3 +49,15 @@ def test_PokeDoctor_report():
             assert x in report['weakness']
         for y in goodness:
             assert y in report['goodness']
+
+def test_PokeDoctor_typeMoveAnalysis():
+    # cases = [
+    #     (,0.5),
+    # ]
+    doctor = pokeai.PokeDoctor()
+    report = [(x,doctor.typeMoveAnalysis(x)) for x in doctor.types]
+    print(report)
+    # for case in cases:
+    #     existsTypes, weakness, goodness = case
+    #     report = doctor.typeMoveAnalysis(existsTypes)
+    #     print(report)

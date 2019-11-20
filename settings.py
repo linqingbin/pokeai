@@ -1,5 +1,5 @@
 TYPE_MAP_FILE_PATH = "data/typeMapEn.csv"
-
+TYPE_MOVE_MAP_FILE_PATH = "data/typeMOve.csv"
 # 效果强弱量化表：GOOD_WEAK_CHECK
 # 2：代表效果拔群
 # 1/2：代表效果不怎么样

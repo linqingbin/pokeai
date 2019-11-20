@@ -12,7 +12,7 @@ This app will recommend the next Pokemon type for you based on your existing Pok
 ## Run
 Run web: 
 ```
-streamlit run .\app.py
+streamlit run .\Pokeaii.py
 ```
 
 Run from command:

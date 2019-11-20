@@ -2,7 +2,7 @@ import math
 import csv
 import numpy as np
 import logging
-from settings import TYPE_MAP_FILE_PATH, MODIFIER_RATIO_CHECK, STRATEGY_WEIGHT_MAP, SYMBOL_MODIFIER_MAP
+from settings import TYPE_MAP_FILE_PATH, TYPE_MOVE_MAP_FILE_PATH, MODIFIER_RATIO_CHECK, STRATEGY_WEIGHT_MAP, SYMBOL_MODIFIER_MAP
 
 
 class PokeDoctor(object):
@@ -13,6 +13,7 @@ class PokeDoctor(object):
         '''
         self.typeMapMat, self.types = getTypeMapMat()
         self.strategy = strategy
+        self.typeMoveMat = getTypeMoveMat()
 
     def getReport(self, existsTypes, topN=3):
         '''
@@ -92,6 +93,26 @@ class PokeDoctor(object):
         }
         return report
 
+    def typeMoveAnalysis(self, PokemonType):
+        typeIndex = self.types.index(PokemonType)
+        defenseModifiers = self.typeMapMat[:, typeIndex].tolist()
+        total = 0
+        weightTotal = 0
+        MODIFIER_MOVE_RATIO_CHECK = {
+            "4": 4,
+            "2": 2,
+            "1": 1,
+            "1/2": 0.5,
+            "0": 0,
+        }
+        for i, modifier in enumerate(defenseModifiers):
+            moveRatio = MODIFIER_MOVE_RATIO_CHECK[modifier]
+            typeMovePer = self.typeMoveMat[i]
+            print(i, moveRatio, typeMovePer)
+            total += moveRatio * typeMovePer
+            weightTotal += moveRatio
+        return total/weightTotal
+
 
 def ratioMean(ratiosArr):
     return ratiosArr.prod() ** (1/len(ratiosArr))
@@ -132,6 +153,24 @@ def getTypeMapMat():
     typeMapMat = np.array([[symbol2modifier(x) for x in row]
                            for row in relations])
     return typeMapMat, types
+
+
+def getTypeMoveMat():
+    with open(TYPE_MOVE_MAP_FILE_PATH, "r", encoding="utf-8") as f:
+        channel = csv.reader(f)
+        data = [x for x in channel]
+    arr = np.array(data)
+    typeMoveMat = {int(row[0]): percentCal(
+        int(row[2]), int(row[3])) for row in arr[1:, :]}
+    # types = [x.replace("\xa0", "") for x in arr[0, :][1:]]
+    # relations = arr[1:, 1:]
+    # typeMapMat = np.array([[symbol2modifier(x) for x in row]
+    #                        for row in relations])
+    return typeMoveMat
+
+
+def percentCal(x, y, k=2):
+    return round(x/(x+y), k)
 
 
 def symbol2modifier(symbol):
